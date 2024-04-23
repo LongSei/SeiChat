@@ -16,7 +16,7 @@ class NoteCog(commands.Cog):
         self.note_queue = deque(maxlen = 10)
     
 
-    @commands.command(name="takenote", description ="Take a note")
+    @commands.command(name="takenote", help =":Take a note")
     async def take_note(self, ctx, *, note):
         note_message = await ctx.send(f'Note added: {note}')
         for emoji in CATEGORY_EMOJIS.values():
@@ -33,7 +33,7 @@ class NoteCog(commands.Cog):
         self.note_queue.append((category_emoji, note))
         await ctx.send(f'Note added to category {category_emoji}: {note}')
      
-    @commands.command(name="viewnotes", description = "View all notes")
+    @commands.command(name="viewnotes", help = ":View all notes")
     async def view_note(self, ctx):
         notes = '\n'.join([f'{note[0]}: {note[1]}' for note in self.note_queue])
         if notes:
