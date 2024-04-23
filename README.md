@@ -5,8 +5,11 @@
 - Sắp xếp lịch trình (In progress...)
 - Quản lí chi tiêu (In progress...)
 - Quản lí thông tin
-- Summarize kiến thức
-- Kiểm tra lại kiến thức bằng câu hỏi
+
+## Requirements
+``` sh
+pip install -r requirements.txt
+```
 
 ## Cách làm việc với một tính năng mới: 
 - Mọi người clone lại git này rồi tạo branch mới:
