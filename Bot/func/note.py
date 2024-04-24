@@ -10,6 +10,9 @@ CATEGORY_EMOJIS = {
     "green": "🟢"
 }
 
+CATEGORY_ORDER = ["🔴", "🟡", "🔵", "🟢"]
+GREEN_TICK_EMOJI ="✅"
+
 class NoteCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -33,13 +36,38 @@ class NoteCog(commands.Cog):
         self.note_queue.append((category_emoji, note))
         await ctx.send(f'Note added to category {category_emoji}: {note}')
      
-    @commands.command(name="viewnotes", description = "View all notes")
+    @commands.command(name="viewnotes", help="View all notes")
     async def view_note(self, ctx):
-        notes = '\n'.join([f'{note[0]}: {note[1]}' for note in self.note_queue])
-        if notes:
-            await ctx.send(f'Notes:\n{notes}')
-        else:
+        if not self.note_queue:
             await ctx.send("No notes available")
+            return
+        sorted_notes = sorted(self.note_queue, key=lambda x: CATEGORY_ORDER.index(x[0]))
+        self.note_messages = {}
+        note_counter = 1
+
+        for index, note in enumerate(sorted_notes):
+            note_text = f'{note_counter}. {note[0]}: {note[1]}'  
+            message = await ctx.send(note_text)
+            self.note_messages[message.id] = note[0]  
+            await message.add_reaction(GREEN_TICK_EMOJI)
+            note_counter += 1
+
+        def check(reaction, user):
+            return user == ctx.author and str(reaction.emoji) == GREEN_TICK_EMOJI and reaction.message.id in self.note_messages
+
+        try:
+            while True:
+                reaction, _ = await self.bot.wait_for('reaction_add', timeout=180.0, check=check) #3 minutes to wait
+                await ctx.send("Note completed. ✅")
+                message_id = reaction.message.id
+                completed_category = self.note_messages.get(message_id)
+                if completed_category:
+                    self.note_queue = [note for note in self.note_queue if note[0] != completed_category] 
+                    del self.note_messages[message_id] 
+                    await reaction.message.delete()
+        except asyncio.TimeoutError:
+            pass
+
 
     @commands.command(name="deletenote", description="delete a note")
     async def delete_note(self, ctx, note_number: int):
