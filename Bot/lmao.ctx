@@ -1,0 +1,64 @@
+import discord
+from discord.ext import commands
+from collections import deque
+
+# Define emoji for categories and their order
+CATEGORY_ORDER = ["🔴", "🟡", "🔵", "🟢"]
+GREEN_TICK_EMOJI = "✅"
+
+class NoteCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.note_queue = deque(maxlen=10)
+
+    @commands.command(name="takenote", description="Take a note")
+    async def take_note(self, ctx, *, note: str):
+        # Send the note message
+        note_message = await ctx.send(f'Note added: {note}')
+
+        # Add reactions for categories
+        for emoji in CATEGORY_ORDER:
+            await note_message.add_reaction(emoji)
+
+        # Define check function for reaction
+        def check(reaction, user):
+            return user == ctx.author and str(reaction.emoji) in CATEGORY_ORDER
+
+        # Wait for reaction
+        try:
+            reaction, _ = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
+        except asyncio.TimeoutError:
+            await ctx.send("Timed out. No category selected.")
+            return
+
+        # Update note with category
+        category_emoji = reaction.emoji
+        self.note_queue.append((category_emoji, note))
+        await ctx.send(f'Note added to category {category_emoji}: {note}')
+
+    @commands.command(name="viewnotes", description="View all notes")
+    async def view_note(self, ctx):
+        # Sort notes by category order
+        sorted_notes = sorted(self.note_queue, key=lambda x: CATEGORY_ORDER.index(x[0]))
+
+        # Prepare formatted notes
+        formatted_notes = '\n'.join([f'{note[0]}: {note[1]} {GREEN_TICK_EMOJI}' for note in sorted_notes])
+
+        if formatted_notes:
+            message = await ctx.send(f'Notes:\n{formatted_notes}')
+            await message.add_reaction(GREEN_TICK_EMOJI)
+
+            # Define check function for reaction
+            def check(reaction, user):
+                return user == ctx.author and str(reaction.emoji) == GREEN_TICK_EMOJI
+
+            # Wait for reaction to complete note
+            try:
+                await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
+                await ctx.send("Note completed. ✅")
+                # Remove the completed note from the queue
+                self.note_queue.popleft()
+            except asyncio.TimeoutError:
+                pass  # No action needed if the timeout occurs
+        else:
+            await ctx.send("No notes available")
