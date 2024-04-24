@@ -19,7 +19,11 @@ class NoteCog(commands.Cog):
         self.note_queue = deque(maxlen = 10)
     
 
-    @commands.command(name="takenote", description ="Take a note")
+    async def print_remaining_notes(self, ctx):
+        remaining_notes = "\n".join([f'{index}. {note[0]}: {note[1]}' for index, note in enumerate(self.note_queue, 1)])
+        await ctx.send(f"Update notes: \n{remaining_notes}")
+
+    @commands.command(name="takenote", help ="Take a note")
     async def take_note(self, ctx, *, note):
         note_message = await ctx.send(f'Note added: {note}, please select your category:')
         for emoji in CATEGORY_EMOJIS.values():
@@ -65,11 +69,11 @@ class NoteCog(commands.Cog):
                     self.note_queue = [note for note in self.note_queue if note[0] != completed_category] 
                     del self.note_messages[message_id] 
                     await reaction.message.delete()
+                    await self.print_remaining_notes(ctx)
         except asyncio.TimeoutError:
             pass
 
-
-    @commands.command(name="deletenote", description="delete a note")
+    @commands.command(name="deletenote", help="delete a note")
     async def delete_note(self, ctx, note_number: int):
         try:
             note_number = int(note_number)
@@ -81,6 +85,7 @@ class NoteCog(commands.Cog):
             delete_note = self.note_queue[note_number - 1]
             del self.note_queue[note_number - 1]
             await ctx.send(f'Note deleted: {delete_note}')
+            await self.print_remaining_notes(ctx)
         else:
             await ctx.send('Invalid note number')
 
