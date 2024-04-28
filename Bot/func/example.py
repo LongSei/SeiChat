@@ -11,6 +11,7 @@ class PingCog(commands.Cog):
 
     @commands.command(name="pong", help=":Responds with 'ping'")
     async def pong(self, ctx):
+        await ctx.send("ping")
 =======
 from discord.ext import commands
 
@@ -24,5 +25,5 @@ class PingCog(commands.Cog):
 
     @commands.command(name="pong", help=":Responds with 'ping'")
     async def pong(self, ctx):
->>>>>>> main
         await ctx.send("ping")
+>>>>>>> main
