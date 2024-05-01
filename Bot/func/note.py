@@ -4,6 +4,7 @@ from discord.ext import commands
 from collections import defaultdict
 import json
 import aiofiles
+from datetime import datetime
 
 # Emoji representations for note categories
 CATEGORY_EMOJIS = {
@@ -24,13 +25,14 @@ class NoteCog(commands.Cog):
 
     Usage
     -----
-    This cog allows users to take notes, view all notes, mark notes as completed, and delete specific notes.
+    This cog allows users to take notes, view all notes, mark notes as completed, delete specific notes, and set reminders for notes.
 
     Commands
     --------
     takenote: Take a note and assign it to a category.
     viewnotes: View all notes and mark them as completed.
     deletenote: Delete a specific note from the note queue.
+    settime: Set a reminder for a specific note.
     '''
     def __init__(self, bot):
         ''' 
@@ -42,6 +44,7 @@ class NoteCog(commands.Cog):
         '''
         self.bot = bot
         self.user_notes = defaultdict(list)  # Stores notes per user in a defaultdict
+        self.reminders = {}  # Stores reminders for notes
         asyncio.create_task(self.load_notes())  # Asynchronously load notes at bot startup
 
     async def load_notes(self):
@@ -73,7 +76,7 @@ class NoteCog(commands.Cog):
             return
         
         notes_display = "\n".join(f"{idx}. {emoji}: {note}" for idx, (emoji, note) in enumerate(self.user_notes[user_id], 1))
-        await ctx.send(f"Your notes:\n{notes_display}")
+        await ctx.send(f"{ctx.author.mention}'s new notes:\n{notes_display}")
 
     @commands.command(name="takenote", help="Take a note and assign it to a category.")
     async def take_note(self, ctx, *, note: str = None):
@@ -88,11 +91,11 @@ class NoteCog(commands.Cog):
         note (string, optional): The note to be taken. Defaults to None.
         '''
         if not note:
-            await ctx.send("Please provide a note.")
+            await ctx.send("**Please provide a note**.")
             return
         
         user_id = str(ctx.author.id)
-        note_message = await ctx.send(f'Note added: {note}\nPlease select your category:')
+        note_message = await ctx.send(f'**Note added**: {note}\nPlease select your category:')
         for emoji in CATEGORY_EMOJIS.values():
             await note_message.add_reaction(emoji)
         
@@ -104,9 +107,9 @@ class NoteCog(commands.Cog):
             category = next(key for key, value in CATEGORY_EMOJIS.items() if value == reaction.emoji)
             self.user_notes[user_id].append((reaction.emoji, note))
             await self.save_notes()
-            await ctx.send(f'Note added to category {reaction.emoji}: {note}')
+            await ctx.send(f'**Note added to category** {reaction.emoji}: {note}')
         except asyncio.TimeoutError:
-            await ctx.send("Timed out. No category selected.")
+            await ctx.send("**Timed out. No category selected**.")
 
     @commands.command(name="viewnotes", help="View all notes and mark them as completed.")
     async def view_note(self, ctx):
@@ -121,8 +124,10 @@ class NoteCog(commands.Cog):
         '''
         user_id = str(ctx.author.id)
         if not self.user_notes[user_id]:
-            await ctx.send("No notes available")
+            await ctx.send("**No notes available**")
             return
+
+        await ctx.send(f"{ctx.author.mention}\n# Notes:")
 
         sorted_notes = sorted(self.user_notes[user_id], key=lambda x: CATEGORY_ORDER.index(x[0]))
         self.note_messages = {}
@@ -146,7 +151,7 @@ class NoteCog(commands.Cog):
                 await reaction.message.delete()
                 await self.__print_remaining_notes(ctx)
         except asyncio.TimeoutError:
-            await ctx.send("No actions taken. Timeout reached.")
+            await ctx.send("")
 
     @commands.command(name="deletenote", help="Delete a specific note.")
     async def delete_note(self, ctx, note_number: int):
@@ -162,13 +167,51 @@ class NoteCog(commands.Cog):
         '''
         user_id = str(ctx.author.id)
         if not self.user_notes[user_id]:
-            await ctx.send("No notes available")
+            await ctx.send("**No notes available**")
             return
 
         if 1 <= note_number <= len(self.user_notes[user_id]):
             deleted_note = self.user_notes[user_id].pop(note_number - 1)
             await self.save_notes()
-            await ctx.send(f'Note deleted: {deleted_note[1]}')
+            await ctx.send(f'**Note deleted**: {deleted_note[1]}')
             await self.__print_remaining_notes(ctx)
         else:
             await ctx.send("Invalid note number provided.")
+
+    @commands.command(name="settime", help="Set a reminder for a specific note.")
+    async def set_reminder(self, ctx, note_number: int, reminder_date: str, reminder_time: str):
+        '''
+        Usage
+        ----- 
+        Set a reminder for a specific note.
+
+        Parameters
+        ----------
+        ctx (discord.ext.commands.Context): The context in which the command was invoked.
+        note_number (int): The number of the note for which the reminder is set.
+        reminder_date (str): The date of the reminder in format DD/MM/YYYY.
+        reminder_time (str): The time of the reminder in 24-hour format HH:MM.
+        '''
+        user_id = str(ctx.author.id)
+        if not self.user_notes[user_id]:
+            await ctx.send("**No notes available**")
+            return
+
+        if 1 <= note_number <= len(self.user_notes[user_id]):
+            note = self.user_notes[user_id][note_number - 1][1]
+            reminder_datetime = datetime.strptime(f"{reminder_date} {reminder_time}", "%d/%m/%Y %H:%M")
+            await ctx.send(f"**Reminder set for note** {note_number}: {note} **on** {reminder_datetime.strftime('%d/%m/%Y %H:%M')}")
+            # Schedule reminder
+            self.reminders[note_number] = (ctx.channel.id, note, reminder_datetime)
+            asyncio.create_task(self.send_reminder(ctx.channel.id, note, reminder_datetime))
+        else:
+            await ctx.send("**Invalid note number provided**.")
+
+    async def send_reminder(self, channel_id, note, reminder_datetime):
+        '''Send reminder to the user at the specified datetime.'''
+        current_datetime = datetime.now()
+        delta = (reminder_datetime - current_datetime).total_seconds()
+        await asyncio.sleep(delta)
+        channel = self.bot.get_channel(channel_id)
+        if channel:
+            await channel.send(f"**Reminder**: {note}")
