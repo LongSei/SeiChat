@@ -1,8 +1,11 @@
 import discord
 import asyncio
 from discord.ext import commands
-from collections import deque
+from collections import defaultdict
+import json
+import aiofiles
 
+# Emoji representations for note categories
 CATEGORY_EMOJIS = {
     "red": "🔴",
     "yellow": "🟡",
@@ -10,7 +13,9 @@ CATEGORY_EMOJIS = {
     "green": "🟢"
 }
 
+# Ordered list of emojis for sorting purposes
 CATEGORY_ORDER = ["🔴", "🟡", "🔵", "🟢"]
+# Emoji for marking a note as completed
 GREEN_TICK_EMOJI = "✅"
 
 class NoteCog(commands.Cog):
@@ -27,7 +32,6 @@ class NoteCog(commands.Cog):
     viewnotes: View all notes and mark them as completed.
     deletenote: Delete a specific note from the note queue.
     '''
-
     def __init__(self, bot):
         ''' 
         Initialize the NoteCog class.
@@ -37,22 +41,41 @@ class NoteCog(commands.Cog):
         bot (discord.ext.commands.Bot): The Discord bot instance.
         '''
         self.bot = bot
-        self.note_queue = deque(maxlen=10)
+        self.user_notes = defaultdict(list)  # Stores notes per user in a defaultdict
+        asyncio.create_task(self.load_notes())  # Asynchronously load notes at bot startup
+
+    async def load_notes(self):
+        '''Load notes from a JSON file asynchronously.'''
+        try:
+            async with aiofiles.open('user_notes.json', 'r') as f:
+                self.user_notes = json.loads(await f.read())
+        except FileNotFoundError:
+            # Initialize to empty defaultdict if file doesn't exist
+            pass
+        except json.JSONDecodeError as e:
+            # Log any JSON errors encountered during file reading
+            print(f"Failed to decode JSON: {e}")
+
+    async def save_notes(self):
+        '''Save the current notes to a JSON file asynchronously.'''
+        try:
+            async with aiofiles.open('user_notes.json', 'w') as f:
+                await f.write(json.dumps(self.user_notes, indent=4))
+        except IOError as e:
+            # Log any IO errors encountered during file writing
+            print(f"Failed to write notes to file: {e}")
 
     async def __print_remaining_notes(self, ctx):
-        '''
-        Usage
-        ----- 
-        Print the remaining notes in the note queue.
+        '''Helper method to display remaining notes for a user.'''
+        user_id = str(ctx.author.id)
+        if not self.user_notes[user_id]:
+            await ctx.send("No notes available")
+            return
+        
+        notes_display = "\n".join(f"{idx}. {emoji}: {note}" for idx, (emoji, note) in enumerate(self.user_notes[user_id], 1))
+        await ctx.send(f"Your notes:\n{notes_display}")
 
-        Parameters
-        ----------
-        ctx (discord.ext.commands.Context): The context in which the command was invoked.
-        '''
-        remaining_notes = "\n".join([f'{index}. {note[0]}: {note[1]}' for index, note in enumerate(self.note_queue, 1)])
-        await ctx.send(f"Update notes: \n{remaining_notes}")
-
-    @commands.command(name="takenote", help=":Take a note")
+    @commands.command(name="takenote", help="Take a note and assign it to a category.")
     async def take_note(self, ctx, *, note: str = None):
         '''
         Usage
@@ -64,11 +87,12 @@ class NoteCog(commands.Cog):
         ctx (discord.ext.commands.Context): The context in which the command was invoked.
         note (string, optional): The note to be taken. Defaults to None.
         '''
-        if note is None:
-            await ctx.send("Please give with the correct command !: !takenote <description>")
+        if not note:
+            await ctx.send("Please provide a note.")
             return
-
-        note_message = await ctx.send(f'Note added: {note}, please select your category:')
+        
+        user_id = str(ctx.author.id)
+        note_message = await ctx.send(f'Note added: {note}\nPlease select your category:')
         for emoji in CATEGORY_EMOJIS.values():
             await note_message.add_reaction(emoji)
         
@@ -77,17 +101,14 @@ class NoteCog(commands.Cog):
         
         try:
             reaction, _ = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
+            category = next(key for key, value in CATEGORY_EMOJIS.items() if value == reaction.emoji)
+            self.user_notes[user_id].append((reaction.emoji, note))
+            await self.save_notes()
+            await ctx.send(f'Note added to category {reaction.emoji}: {note}')
         except asyncio.TimeoutError:
             await ctx.send("Timed out. No category selected.")
-            return
-        
-        category_emoji = reaction.emoji
-        category = [key for key, value in CATEGORY_EMOJIS.items() if value == category_emoji][0]
-        self.note_queue.append((category_emoji, note))
-        await ctx.send(f'Note added to category {category_emoji}: {note}')
 
-
-    @commands.command(name="viewnotes", help=":View all notes")
+    @commands.command(name="viewnotes", help="View all notes and mark them as completed.")
     async def view_note(self, ctx):
         '''
         Usage
@@ -98,39 +119,36 @@ class NoteCog(commands.Cog):
         ----------
         ctx (discord.ext.commands.Context): The context in which the command was invoked.
         '''
-        if not self.note_queue:
+        user_id = str(ctx.author.id)
+        if not self.user_notes[user_id]:
             await ctx.send("No notes available")
             return
-        
-        sorted_notes = sorted(self.note_queue, key=lambda x: CATEGORY_ORDER.index(x[0]))
-        self.note_messages = {}
-        note_counter = 1
 
-        for index, note in enumerate(sorted_notes):
-            note_text = f'{note_counter}. {note[0]}: {note[1]}'  
-            message = await ctx.send(note_text)
-            self.note_messages[message.id] = note[0]  
+        sorted_notes = sorted(self.user_notes[user_id], key=lambda x: CATEGORY_ORDER.index(x[0]))
+        self.note_messages = {}
+
+        for note_index, (emoji, note) in enumerate(sorted_notes, 1):
+            message = await ctx.send(f"{note_index}. {emoji}: {note}")
+            self.note_messages[message.id] = emoji
             await message.add_reaction(GREEN_TICK_EMOJI)
-            note_counter += 1
 
         def check(reaction, user):
             return user == ctx.author and str(reaction.emoji) == GREEN_TICK_EMOJI and reaction.message.id in self.note_messages
 
         try:
-            while True:
-                reaction, _ = await self.bot.wait_for('reaction_add', timeout=180.0, check=check)  # 3 minutes to wait
-                await ctx.send("Note completed. ✅")
-                message_id = reaction.message.id
-                completed_category = self.note_messages.get(message_id)
-                if completed_category:
-                    self.note_queue = [note for note in self.note_queue if note[0] != completed_category] 
-                    del self.note_messages[message_id] 
-                    await reaction.message.delete()
-                    await self.__print_remaining_notes(ctx)
+            reaction, _ = await self.bot.wait_for('reaction_add', timeout=180.0, check=check)
+            await ctx.send("Note completed. ✅")
+            message_id = reaction.message.id
+            if message_id in self.note_messages:
+                category_to_remove = self.note_messages.pop(message_id)
+                self.user_notes[user_id] = [note for note in self.user_notes[user_id] if note[0] != category_to_remove]
+                await self.save_notes()
+                await reaction.message.delete()
+                await self.__print_remaining_notes(ctx)
         except asyncio.TimeoutError:
-            pass
+            await ctx.send("No actions taken. Timeout reached.")
 
-    @commands.command(name="deletenote", help=":delete a note")
+    @commands.command(name="deletenote", help="Delete a specific note.")
     async def delete_note(self, ctx, note_number: int):
         '''
         Usage
@@ -142,19 +160,15 @@ class NoteCog(commands.Cog):
         ctx (discord.ext.commands.Context): The context in which the command was invoked.
         note_number (int): The number of the note to be deleted.
         '''
-        if (note_number == None): 
-            await ctx.send("Please give with the correct command !: !delete_note <note_number>")
+        user_id = str(ctx.author.id)
+        if not self.user_notes[user_id]:
+            await ctx.send("No notes available")
             return
-        try:
-            note_number = int(note_number)
-        except ValueError:
-            await ctx.send("Invalid note number. Please enter a valid integer.")
-            return
-        
-        if 1 <= note_number <= len(self.note_queue):
-            delete_note = self.note_queue[note_number - 1]
-            del self.note_queue[note_number - 1]
-            await ctx.send(f'Note deleted: {delete_note}')
+
+        if 1 <= note_number <= len(self.user_notes[user_id]):
+            deleted_note = self.user_notes[user_id].pop(note_number - 1)
+            await self.save_notes()
+            await ctx.send(f'Note deleted: {deleted_note[1]}')
             await self.__print_remaining_notes(ctx)
         else:
-            await ctx.send('Invalid note number')
+            await ctx.send("Invalid note number provided.")
