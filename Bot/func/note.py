@@ -4,19 +4,7 @@ from discord.ext import commands
 from collections import defaultdict
 import json
 import aiofiles
-
-# Emoji representations for note categories
-CATEGORY_EMOJIS = {
-    "red": "🔴",
-    "yellow": "🟡",
-    "blue": "🔵",
-    "green": "🟢"
-}
-
-# Ordered list of emojis for sorting purposes
-CATEGORY_ORDER = ["🔴", "🟡", "🔵", "🟢"]
-# Emoji for marking a note as completed
-GREEN_TICK_EMOJI = "✅"
+from config.constant import *
 
 class NoteCog(commands.Cog):
     ''' 
@@ -101,7 +89,6 @@ class NoteCog(commands.Cog):
         
         try:
             reaction, _ = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
-            category = next(key for key, value in CATEGORY_EMOJIS.items() if value == reaction.emoji)
             self.user_notes[user_id].append((reaction.emoji, note))
             await self.save_notes()
             await ctx.send(f'Note added to category {reaction.emoji}: {note}')
