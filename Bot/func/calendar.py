@@ -20,15 +20,19 @@ class CalendarUtils():
         for task in self.tasks:
             task_datetime = datetime.strptime(task["time"], '%Y/%m/%d')
             start_of_week = task_datetime - timedelta(days=task_datetime.weekday())
-            start_of_week_str = start_of_week.strftime('%Y-%m-%d')
+            start_of_week_str = start_of_week.strftime('%Y/%m/%d')
             if start_of_week_str not in tasks_by_week:
                 tasks_by_week[start_of_week_str] = [task]
             else:
                 tasks_by_week[start_of_week_str].append(task)
         return tasks_by_week
     
-    def __sort_task(self, week_tasks):
+    def __sort_task(self, week_tasks, start_of_week):
         dq = deque()
+        AMOUNT_DAY_IN_WEEK = 7
+        MAX_HOUR_PER_DAY = 12
+        result = []
+        
         non_const_task = []
         for task in week_tasks: 
             if (task['is_constant'] == True):
@@ -43,19 +47,18 @@ class CalendarUtils():
             
         week_tasks = non_const_task
         for _ in range(AMOUNT_DAY_IN_WEEK):
-            schedule = [0 for _ in range(AMOUNT_DAY_IN_WEEK)]
-            schedule[_] += week_tasks[0]["duration"]
-            schedule_detail = [[] for _ in range(AMOUNT_DAY_IN_WEEK)]
-            schedule_detail[_].append(week_tasks[0])
-            dq.append([0, schedule, schedule_detail])
-        isAppend[0] = True
+            dayTime = datetime.strptime(start_of_week, "%Y/%m/%d") + timedelta(days=_)
+            if (dayTime < (datetime.now() - timedelta(days=1))): 
+                continue
+            else:
+                schedule = [0 for _ in range(AMOUNT_DAY_IN_WEEK)]
+                schedule[_] += week_tasks[0]["duration"]
+                schedule_detail = [[] for _ in range(AMOUNT_DAY_IN_WEEK)]
+                schedule_detail[_].append(week_tasks[0])
+                dq.append([0, schedule, schedule_detail])
         
         AMOUNT_TASK = len(week_tasks)
-        AMOUNT_DAY_IN_WEEK = 7
-        MAX_HOUR_PER_DAY = 12
-
         dp = [1000000 for _ in range(AMOUNT_TASK)]
-        result = []
         isAppend = [False for _ in range(AMOUNT_TASK)]
         
         isAppend[0] = True
@@ -70,7 +73,10 @@ class CalendarUtils():
                 else:
                     new_task_index = task_index + 1
                     for day in range(AMOUNT_DAY_IN_WEEK):
-                        if (schedule[day] + week_tasks[new_task_index]["duration"]) <= MAX_HOUR_PER_DAY:
+                        dayTime = datetime.strptime(start_of_week, "%Y/%m/%d") + timedelta(days=day)
+                        if (dayTime < datetime.now()): 
+                            continue
+                        elif (schedule[day] + week_tasks[new_task_index]["duration"]) <= MAX_HOUR_PER_DAY:
                             isAppend[new_task_index] = True
                             new_schedule = copy.deepcopy(schedule)
                             new_schedule[day] += week_tasks[new_task_index]["duration"]
@@ -82,12 +88,27 @@ class CalendarUtils():
             if not isAppend[taskIdx]:
                 return [result, [week_tasks[idx] for idx in range(taskIdx, AMOUNT_TASK)]]
         return [result, []]
-                    
             
     def run(self): 
         data = self.__split_tasks_into_weeks()
-        for weekIdx in range(0, len(data)): 
-            data[weekIdx] = self.__sort_task(data[weekIdx])
+        day_in_next_week = datetime.strptime(list(data.keys())[-1], "%Y/%m/%d") + timedelta(days=7)
+        next_week = datetime.strftime(day_in_next_week - timedelta(days=day_in_next_week.weekday()), "%Y/%m/%d")
+
+        move_next_week = []
+        for start_of_week in list(data.keys()):
+            if (move_next_week): 
+                data[start_of_week] = data[start_of_week] + move_next_week
+                move_next_week = []
+            [data[start_of_week], move_next_week] = self.__sort_task(data[start_of_week], start_of_week)
+
+            for dayIdx in range(0, len(data[start_of_week])):
+                start_of_week_time = datetime.strptime(start_of_week, "%Y/%m/%d")
+                new_date = start_of_week_time + timedelta(days=dayIdx)
+                datetime_str = datetime.strftime(new_date, "%Y/%m/%d")
+                for taskIdx in range(0, len(data[start_of_week][dayIdx])): 
+                    data[start_of_week][dayIdx][taskIdx]['time'] = datetime_str
+        if (move_next_week): 
+            data[next_week] = move_next_week
         return data
 
 class CalendarCog(commands.Cog):
@@ -184,6 +205,14 @@ class CalendarCog(commands.Cog):
         if (str(ctx.author) not in self.user_tasks) or (not self.user_tasks[str(ctx.author)]):
             await ctx.send("Bạn hoàn toàn rảnh rỗi trong thời gian sắp tới")
             return
+        new_data = CalendarUtils(self.user_tasks[str(ctx.author)]).run()
+        result = []
+        for _ in new_data.values(): 
+            for __ in _: 
+                for ___ in __:
+                    result.append(___)
+        self.user_tasks[str(ctx.author)] = result
+        await self.save_tasks()
 
         tasks_map = {}
 
