@@ -177,7 +177,7 @@ class CalendarCog(commands.Cog):
         try:
             new_task = {"category": category, "task_name": task_name, "time": time, "description": description, "duration": duration}
 
-            message = await ctx.send("Do you want to set this as a recurring event?")
+            message = await ctx.send("**Do you want to set this as a recurring event?**")
             await message.add_reaction(GREEN_TICK_EMOJI)
             await message.add_reaction(RED_CANCEL_EMOJI)
 
@@ -193,17 +193,17 @@ class CalendarCog(commands.Cog):
                 self.user_tasks.setdefault(str(ctx.author), [])
                 self.user_tasks[str(ctx.author)].append(new_task)
                 await self.save_tasks()
-                await ctx.send("Schedule added!")
+                await ctx.send("**Schedule added!**")
             except:
-                await ctx.send("An error occurred, please try again.")
+                await ctx.send("**An error occurred, please try again.**")
         except:
-            await ctx.send("An error occurred, please try again.")
+            await ctx.send("**An error occurred, please try again.**")
 
     @commands.command(name="viewtasks", help="View all tasks in the calendar or modify a task.")
     async def view_tasks(self, ctx):
         '''View all tasks in the calendar or modify a task.'''
         if (str(ctx.author) not in self.user_tasks) or (not self.user_tasks[str(ctx.author)]):
-            await ctx.send("You are completely free in the upcoming time.")
+            await ctx.send("**You are completely free in the upcoming time.**")
             return
         new_data = CalendarUtils(self.user_tasks[str(ctx.author)]).run()
         result = []
@@ -217,8 +217,8 @@ class CalendarCog(commands.Cog):
         tasks_map = {}
 
         for task_index, task in enumerate(self.user_tasks[str(ctx.author)], 1):
-            tasks_display = f"------------------------\nCategory: {task['category']}\nTask Name: {task['task_name']}\nTime: {task['duration']} - {task['time']}\nDescription: {task['description']}\nRecurring Event: {'Yes' if task['is_constant'] else 'No'}\n"
-            message = await ctx.send(f"Your tasks, {str(ctx.author)}:\n{tasks_display}")
+            tasks_display = f"------------------------\n```Category: {task['category']}\nTask Name: {task['task_name']}\nTime: {task['duration']} - {task['time']}\nDescription: {task['description']}\nRecurring Event: {'Yes' if task['is_constant'] else 'No'}\n```"
+            message = await ctx.send(f"**Your tasks, {str(ctx.author)}**:\n{tasks_display}")
             await message.add_reaction(RED_CANCEL_EMOJI)
             await message.add_reaction(SETTING_EMOJI)
 
@@ -248,13 +248,13 @@ class CalendarCog(commands.Cog):
     async def modify_task(self, ctx, task):
         '''Modify a task in the calendar.'''
         # Prompt user for modifications
-        message = await ctx.send("What would you like to change?\n"
-                                 "1. Category\n"
-                                 "2. Name\n"
-                                 "3. Time\n"
-                                 "4. Description\n"
-                                 "5. Duration\n"
-                                 "6. Fixed or not")
+        message = await ctx.send("**What would you like to change?**\n"
+                                 "**1. Category**\n"
+                                 "**2. Name**\n"
+                                 "**3. Time**\n"
+                                 "**4. Description**\n"
+                                 "**5. Duration**\n"
+                                 "**6. Fixed or not**")
 
         def check(reaction, user):
             return user == ctx.author and reaction.message.id == ctx.message.id and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"]
@@ -277,7 +277,7 @@ class CalendarCog(commands.Cog):
             modification = options.get(str(reaction.emoji))
 
             if modification:
-                await ctx.send(f"Enter the new {modification}:")
+                await ctx.send(f"**Enter the new {modification}:**")
                 new_value = await self.bot.wait_for('message', check=lambda message: message.author == ctx.author and message.channel == ctx.channel, timeout=60)
 
                 if modification == "duration":
@@ -287,9 +287,9 @@ class CalendarCog(commands.Cog):
 
                 task[modification] = str(new_value.content)
                 await self.save_tasks()
-                await ctx.send("Schedule successfully updated")
+                await ctx.send("**Schedule successfully updated!**")
             else:
-                await ctx.send("Invalid selection")
+                await ctx.send("**Invalid selection**")
         except asyncio.TimeoutError:
             print("Timeout: No reaction received.")
         except Exception as e:
