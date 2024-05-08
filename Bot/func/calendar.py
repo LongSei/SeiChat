@@ -30,6 +30,7 @@ class CalendarUtils():
     def __sort_task(self, week_tasks, start_of_week):
         dq = deque()
         AMOUNT_DAY_IN_WEEK = 7
+        ALL_TASKS = week_tasks
         MAX_HOUR_PER_DAY = 12
         result = []
 
@@ -37,57 +38,63 @@ class CalendarUtils():
         for task in week_tasks:
             if (task['is_constant'] == True):
                 _ = datetime.strptime(task["time"], '%Y/%m/%d').weekday()
+                if (datetime.now() > datetime.strptime(task["time"], '%Y/%m/%d')):
+                    continue
                 schedule = [0 for __ in range(AMOUNT_DAY_IN_WEEK)]
-                schedule[_] += task["duration"]
+                schedule[_] += float(task["duration"])
                 schedule_detail = [[] for __ in range(AMOUNT_DAY_IN_WEEK)]
                 schedule_detail[_].append(task)
                 dq.append([0, schedule, schedule_detail])
             else:
                 non_const_task.append(task)
-
+    
         week_tasks = non_const_task
-        for _ in range(AMOUNT_DAY_IN_WEEK):
-            dayTime = datetime.strptime(start_of_week, "%Y/%m/%d") + timedelta(days=_)
-            if (dayTime < (datetime.now() - timedelta(days=1))):
-                continue
-            else:
-                schedule = [0 for _ in range(AMOUNT_DAY_IN_WEEK)]
-                schedule[_] += week_tasks[0]["duration"]
-                schedule_detail = [[] for _ in range(AMOUNT_DAY_IN_WEEK)]
-                schedule_detail[_].append(week_tasks[0])
-                dq.append([0, schedule, schedule_detail])
-
         AMOUNT_TASK = len(week_tasks)
-        dp = [1000000 for _ in range(AMOUNT_TASK)]
-        isAppend = [False for _ in range(AMOUNT_TASK)]
+        
+        if (len(week_tasks) != 0):
+            for _ in range(AMOUNT_DAY_IN_WEEK):
+                dayTime = datetime.strptime(start_of_week, "%Y/%m/%d") + timedelta(days=_)
+                if (dayTime <= (datetime.now())):
+                    continue
+                else:
+                    schedule = [0 for _ in range(AMOUNT_DAY_IN_WEEK)]
+                    schedule[_] += week_tasks[0]["duration"]
+                    schedule_detail = [[] for _ in range(AMOUNT_DAY_IN_WEEK)]
+                    schedule_detail[_].append(week_tasks[0])
+                    dq.append([1, schedule, schedule_detail])
 
-        isAppend[0] = True
+        dp = [[1000000, []] for _ in range(AMOUNT_TASK + 1)]
         while dq:
             task_index, schedule, schedule_detail = dq.popleft()
             diff = max(schedule) - min(schedule)
-            if dp[task_index] > diff:
-                dp[task_index] = diff
-                result = schedule_detail
-                if task_index == AMOUNT_TASK - 1:
+            if dp[task_index][0] >= diff:
+                dp[task_index] = [diff, schedule_detail]
+                if task_index == AMOUNT_TASK:
                     continue
                 else:
                     new_task_index = task_index + 1
                     for day in range(AMOUNT_DAY_IN_WEEK):
                         dayTime = datetime.strptime(start_of_week, "%Y/%m/%d") + timedelta(days=day)
-                        if (dayTime < datetime.now()):
+                        if (dayTime <= datetime.now()):
                             continue
-                        elif (schedule[day] + week_tasks[new_task_index]["duration"]) <= MAX_HOUR_PER_DAY:
-                            isAppend[new_task_index] = True
+                        elif (schedule[day] + week_tasks[new_task_index - 1]["duration"]) <= MAX_HOUR_PER_DAY:
                             new_schedule = copy.deepcopy(schedule)
-                            new_schedule[day] += week_tasks[new_task_index]["duration"]
+                            new_schedule[day] += week_tasks[new_task_index - 1]["duration"]
                             new_schedule_detail = copy.deepcopy(schedule_detail)
-                            new_schedule_detail[day].append(week_tasks[new_task_index])
+                            new_schedule_detail[day].append(week_tasks[new_task_index - 1])
                             dq.append([new_task_index, new_schedule, new_schedule_detail])
 
-        for taskIdx in range(AMOUNT_TASK):
-            if not isAppend[taskIdx]:
-                return [result, [week_tasks[idx] for idx in range(taskIdx, AMOUNT_TASK)]]
-        return [result, []]
+        
+        for idx in range(0, len(dp)): 
+            if (dp[idx] != 1000000): 
+                result = dp[idx][1]
+        
+        task_used = [item for sublist in result for item in sublist]
+        move_next_week = []    
+        for task in ALL_TASKS: 
+            if (task in task_used) == False: 
+                move_next_week.append(task)
+        return [result, move_next_week]
 
     def run(self):
         data = self.__split_tasks_into_weeks()
@@ -96,7 +103,7 @@ class CalendarUtils():
 
         move_next_week = []
         for start_of_week in list(data.keys()):
-            if (move_next_week):
+            if (len(move_next_week) != 0):
                 data[start_of_week] = data[start_of_week] + move_next_week
                 move_next_week = []
             [data[start_of_week], move_next_week] = self.__sort_task(data[start_of_week], start_of_week)
@@ -155,7 +162,7 @@ class CalendarCog(commands.Cog):
     async def add_task(self, ctx, category: str=None, task_name: str=None, time: str=None, duration: float=2.0, description: str=None):
         '''Add a task to the calendar.'''
         if None in (category, task_name, time, duration):
-            await ctx.send("**There was an error, please enter the following command correctly:**\n```!addtask <Category> <Task Name> <Execution Time: 'YYYY/MM/DD'> [Execution Duration] [Description]```")
+            await ctx.send("**There was an error, please enter the following command correctly:**\n```!addtask <Category> <Task Name> <Time: 'YYYY/MM/DD'> [Duration] [Description]```")
             return
 
         from datetime import datetime
@@ -207,11 +214,15 @@ class CalendarCog(commands.Cog):
             return
         new_data = CalendarUtils(self.user_tasks[str(ctx.author)]).run()
         result = []
-        for _ in new_data.values():
-            for __ in _:
-                for ___ in __:
-                    result.append(___)
+        for week_tasks in new_data.values():
+            for day_tasks in week_tasks:
+                for task in day_tasks: 
+                    result.append(task)
         self.user_tasks[str(ctx.author)] = result
+        if (len(result) == 0) :
+            await ctx.send("**You are completely free in the upcoming time.**")
+            return
+        
         await self.save_tasks()
 
         tasks_map = {}
