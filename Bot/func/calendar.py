@@ -8,11 +8,11 @@ from collections import deque
 from datetime import datetime, timedelta
 import copy
 
-class CalendarUtils(): 
-    def __init__(self, tasks): 
+class CalendarUtils():
+    def __init__(self, tasks):
         self.tasks = tasks
-        
-    def __remove_all_old_task(self): 
+
+    def __remove_all_old_task(self):
         pass
 
     def __split_tasks_into_weeks(self):
@@ -26,15 +26,15 @@ class CalendarUtils():
             else:
                 tasks_by_week[start_of_week_str].append(task)
         return tasks_by_week
-    
+
     def __sort_task(self, week_tasks, start_of_week):
         dq = deque()
         AMOUNT_DAY_IN_WEEK = 7
         MAX_HOUR_PER_DAY = 12
         result = []
-        
+
         non_const_task = []
-        for task in week_tasks: 
+        for task in week_tasks:
             if (task['is_constant'] == True):
                 _ = datetime.strptime(task["time"], '%Y/%m/%d').weekday()
                 schedule = [0 for __ in range(AMOUNT_DAY_IN_WEEK)]
@@ -42,13 +42,13 @@ class CalendarUtils():
                 schedule_detail = [[] for __ in range(AMOUNT_DAY_IN_WEEK)]
                 schedule_detail[_].append(task)
                 dq.append([0, schedule, schedule_detail])
-            else: 
+            else:
                 non_const_task.append(task)
-            
+
         week_tasks = non_const_task
         for _ in range(AMOUNT_DAY_IN_WEEK):
             dayTime = datetime.strptime(start_of_week, "%Y/%m/%d") + timedelta(days=_)
-            if (dayTime < (datetime.now() - timedelta(days=1))): 
+            if (dayTime < (datetime.now() - timedelta(days=1))):
                 continue
             else:
                 schedule = [0 for _ in range(AMOUNT_DAY_IN_WEEK)]
@@ -56,11 +56,11 @@ class CalendarUtils():
                 schedule_detail = [[] for _ in range(AMOUNT_DAY_IN_WEEK)]
                 schedule_detail[_].append(week_tasks[0])
                 dq.append([0, schedule, schedule_detail])
-        
+
         AMOUNT_TASK = len(week_tasks)
         dp = [1000000 for _ in range(AMOUNT_TASK)]
         isAppend = [False for _ in range(AMOUNT_TASK)]
-        
+
         isAppend[0] = True
         while dq:
             task_index, schedule, schedule_detail = dq.popleft()
@@ -74,7 +74,7 @@ class CalendarUtils():
                     new_task_index = task_index + 1
                     for day in range(AMOUNT_DAY_IN_WEEK):
                         dayTime = datetime.strptime(start_of_week, "%Y/%m/%d") + timedelta(days=day)
-                        if (dayTime < datetime.now()): 
+                        if (dayTime < datetime.now()):
                             continue
                         elif (schedule[day] + week_tasks[new_task_index]["duration"]) <= MAX_HOUR_PER_DAY:
                             isAppend[new_task_index] = True
@@ -88,15 +88,15 @@ class CalendarUtils():
             if not isAppend[taskIdx]:
                 return [result, [week_tasks[idx] for idx in range(taskIdx, AMOUNT_TASK)]]
         return [result, []]
-            
-    def run(self): 
+
+    def run(self):
         data = self.__split_tasks_into_weeks()
         day_in_next_week = datetime.strptime(list(data.keys())[-1], "%Y/%m/%d") + timedelta(days=7)
         next_week = datetime.strftime(day_in_next_week - timedelta(days=day_in_next_week.weekday()), "%Y/%m/%d")
 
         move_next_week = []
         for start_of_week in list(data.keys()):
-            if (move_next_week): 
+            if (move_next_week):
                 data[start_of_week] = data[start_of_week] + move_next_week
                 move_next_week = []
             [data[start_of_week], move_next_week] = self.__sort_task(data[start_of_week], start_of_week)
@@ -105,21 +105,21 @@ class CalendarUtils():
                 start_of_week_time = datetime.strptime(start_of_week, "%Y/%m/%d")
                 new_date = start_of_week_time + timedelta(days=dayIdx)
                 datetime_str = datetime.strftime(new_date, "%Y/%m/%d")
-                for taskIdx in range(0, len(data[start_of_week][dayIdx])): 
+                for taskIdx in range(0, len(data[start_of_week][dayIdx])):
                     data[start_of_week][dayIdx][taskIdx]['time'] = datetime_str
-        if (move_next_week): 
+        if (move_next_week):
             data[next_week] = move_next_week
         return data
 
 class CalendarCog(commands.Cog):
     '''
     A cog within a Discord bot for managing calendar events efficiently.
-    
+
     Functions include adding, viewing, and managing events.
     '''
 
     def __init__(self, bot):
-        ''' 
+        '''
         Initialize the CalendarCog class.
 
         Parameters
@@ -155,9 +155,9 @@ class CalendarCog(commands.Cog):
     async def add_task(self, ctx, category: str=None, task_name: str=None, time: str=None, duration: float=2.0, description: str=None):
         '''Add a task to the calendar.'''
         if None in (category, task_name, time, duration):
-            await ctx.send("Có lỗi xảy ra, vui lòng nhập đúng dòng lệnh sau: \n!addtask <Phân loại> <Tên lịch trình> <Thời Gian Thực Hiện: 'YYYY/MM/DD'> [Khoảng thời gian Thực Hiện] [Mô Tả]")
+            await ctx.send("**There was an error, please enter the following command correctly:**\n```!addtask <Category> <Task Name> <Execution Time: 'YYYY/MM/DD'> [Execution Duration] [Description]```")
             return
-        
+
         from datetime import datetime
 
         def check_datetime_format(input_str):
@@ -166,49 +166,49 @@ class CalendarCog(commands.Cog):
                 return True
             except ValueError:
                 return False
-        
-        if (check_datetime_format(time) == False): 
-            await ctx.send("Có lỗi với dữ liệu ngày tháng: 'YYYY/MM/DD'")
+
+        if not check_datetime_format(time):
+            await ctx.send("**There is an error with the date data:** \n```Enter the date in the format: YYYY/MM/DD```")
 
         category = category.lower()
         task_name = task_name.lower()
         time = time.lower()
-        
-        try: 
+
+        try:
             new_task = {"category": category, "task_name": task_name, "time": time, "description": description, "duration": duration}
 
-            message = await ctx.send("Bạn có muốn để đây là lịch cố định không ?")
+            message = await ctx.send("Do you want to set this as a recurring event?")
             await message.add_reaction(GREEN_TICK_EMOJI)
             await message.add_reaction(RED_CANCEL_EMOJI)
-            
+
             def check(reaction, user):
                 return user == ctx.author and str(reaction.emoji) in [RED_CANCEL_EMOJI, GREEN_TICK_EMOJI]
-            
-            try: 
+
+            try:
                 reaction, _ = await self.bot.wait_for('reaction_add', check=check)
-                if (str(reaction) == str(GREEN_TICK_EMOJI)): 
+                if str(reaction) == str(GREEN_TICK_EMOJI):
                     new_task["is_constant"] = True
-                else: 
+                else:
                     new_task["is_constant"] = False
                 self.user_tasks.setdefault(str(ctx.author), [])
                 self.user_tasks[str(ctx.author)].append(new_task)
                 await self.save_tasks()
-                await ctx.send("Đã thêm lịch trình !")
-            except: 
-                await ctx.send("Có lỗi xảy ra, vui lòng thử lại")
-        except: 
-            await ctx.send("Có lỗi xảy ra, vui lòng thử lại")
+                await ctx.send("Schedule added!")
+            except:
+                await ctx.send("An error occurred, please try again.")
+        except:
+            await ctx.send("An error occurred, please try again.")
 
     @commands.command(name="viewtasks", help="View all tasks in the calendar or modify a task.")
     async def view_tasks(self, ctx):
         '''View all tasks in the calendar or modify a task.'''
         if (str(ctx.author) not in self.user_tasks) or (not self.user_tasks[str(ctx.author)]):
-            await ctx.send("Bạn hoàn toàn rảnh rỗi trong thời gian sắp tới")
+            await ctx.send("You are completely free in the upcoming time.")
             return
         new_data = CalendarUtils(self.user_tasks[str(ctx.author)]).run()
         result = []
-        for _ in new_data.values(): 
-            for __ in _: 
+        for _ in new_data.values():
+            for __ in _:
                 for ___ in __:
                     result.append(___)
         self.user_tasks[str(ctx.author)] = result
@@ -217,8 +217,8 @@ class CalendarCog(commands.Cog):
         tasks_map = {}
 
         for task_index, task in enumerate(self.user_tasks[str(ctx.author)], 1):
-            tasks_display = f"------------------------ \nPhân loại: {task['category']} \nTên lịch trình: {task['task_name']} \nThời gian: {task['duration']} - {task['time']}\nMô tả: {task['description']} \nLịch cố định: {'Đúng' if task['is_constant'] else 'Sai'} \n"
-            message = await ctx.send(f"Công việc của {str(ctx.author)}:\n{tasks_display}")
+            tasks_display = f"------------------------\nCategory: {task['category']}\nTask Name: {task['task_name']}\nTime: {task['duration']} - {task['time']}\nDescription: {task['description']}\nRecurring Event: {'Yes' if task['is_constant'] else 'No'}\n"
+            message = await ctx.send(f"Your tasks, {str(ctx.author)}:\n{tasks_display}")
             await message.add_reaction(RED_CANCEL_EMOJI)
             await message.add_reaction(SETTING_EMOJI)
 
@@ -248,13 +248,13 @@ class CalendarCog(commands.Cog):
     async def modify_task(self, ctx, task):
         '''Modify a task in the calendar.'''
         # Prompt user for modifications
-        message = await ctx.send(f"Bạn muốn thay đổi mục nào?\n"
-                    "1. Thể loại\n"
-                    "2. Tên \n"
-                    "3. Thời gian\n"
-                    "4. Mô tả\n"
-                    "5. Thời lượng\n"
-                    "6. Cố định hay không")
+        message = await ctx.send("What would you like to change?\n"
+                                 "1. Category\n"
+                                 "2. Name\n"
+                                 "3. Time\n"
+                                 "4. Description\n"
+                                 "5. Duration\n"
+                                 "6. Fixed or not")
 
         def check(reaction, user):
             return user == ctx.author and reaction.message.id == ctx.message.id and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"]
@@ -287,9 +287,9 @@ class CalendarCog(commands.Cog):
 
                 task[modification] = str(new_value.content)
                 await self.save_tasks()
-                await ctx.send("Thay đổi lịch trình thành công")
+                await ctx.send("Schedule successfully updated")
             else:
-                await ctx.send("Lựa chọn không hợp lệ")
+                await ctx.send("Invalid selection")
         except asyncio.TimeoutError:
             print("Timeout: No reaction received.")
         except Exception as e:
