@@ -1,0 +1,10 @@
+{
+    "n_duhgn": [
+        "category",
+        "task_name",
+        "time",
+        "description",
+        "duration",
+        "is_constant"
+    ]
+}
