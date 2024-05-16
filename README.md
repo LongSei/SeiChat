@@ -5,8 +5,11 @@
 - Sắp xếp lịch trình (In progress...)
 - Quản lí chi tiêu (In progress...)
 - Quản lí thông tin
-- Summarize kiến thức
-- Kiểm tra lại kiến thức bằng câu hỏi
+
+## Requirements
+``` sh
+pip install -r requirements.txt
+```
 
 ## Cách làm việc với một tính năng mới: 
 - Mọi người clone lại git này rồi tạo branch mới:
@@ -30,11 +33,11 @@ class PingCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="ping", description="Responds with 'pong'")
+    @commands.command(name="ping", help=":Responds with 'pong'")
     async def ping(self, ctx):
         await ctx.send("pong")
 
-    @commands.command(name="pong", description="Responds with 'ping'")
+    @commands.command(name="pong", help=":Responds with 'ping'")
     async def pong(self, ctx):
         await ctx.send("ping")
 ```
